@@ -146,6 +146,19 @@ export interface CurrencyConfig {
   methods: PaymentMethodConfig[];
 }
 
+// --- NEW HIERARCHY: GATEWAY PROFILES ---
+export interface GatewayProfile {
+    id: string;
+    slug: string; // 'PAYPAL', 'USDT', 'ZINLI', 'WALLY'
+    label: string; // "Saldo PayPal", "Criptomonedas"
+    iconName: string; // For UI mapping
+    enabled: boolean;
+    
+    // Each Gateway has its own Currencies and Costs
+    currencies: CurrencyConfig[];
+    costs: CostGroup[];
+}
+
 // Coupons
 export type CouponCategory = 'ADMIN' | 'CLIENT';
 export type CouponType = 'REFERRAL' | 'GIFT' | 'GLOBAL_PROMO' | 'TARGET_PROMO';
@@ -228,9 +241,7 @@ export interface ContactMessage { // NEW
 
 export interface SystemConfig {
   logistics: {
-    rates: RateConfig;
-    costs: CostGroup[]; // Dynamic Chain
-    currencies: CurrencyConfig[];
+    gatewayProfiles: GatewayProfile[]; // NEW ROOT
     coupons: Coupon[];
     profiles: ConfigProfile[];
     descriptions: ContextDescriptions;

@@ -40,7 +40,7 @@ export const ExchangeModal: React.FC<ExchangeModalProps> = ({
   const [operationMode, setOperationMode] = useState<'BUY' | 'SELL'>(initialOperationMode);
   
   // Calculate quote logic
-  const [quote, setQuote] = useState(MockBackend.calculateQuote(initialAmount, initialCurrency));
+  const [quote, setQuote] = useState(MockBackend.calculateQuote(initialAmount, initialCurrency, undefined, undefined, initialGateway));
   const [config] = useState(MockBackend.getConfig());
   
   // Breakdown Toggle State
@@ -76,7 +76,7 @@ export const ExchangeModal: React.FC<ExchangeModalProps> = ({
       setAmount(initialAmount);
       setCurrency(initialCurrency);
       setOperationMode(initialOperationMode);
-      setQuote(MockBackend.calculateQuote(initialAmount, initialCurrency));
+      setQuote(MockBackend.calculateQuote(initialAmount, initialCurrency, undefined, undefined, initialGateway));
       setIsSubmitting(false);
       setIsDetailsOpen(false); // Reset breakdown toggle
       setError(null);
@@ -99,7 +99,7 @@ export const ExchangeModal: React.FC<ExchangeModalProps> = ({
 
   useEffect(() => {
       const target = currency;
-      const result = MockBackend.calculateQuote(amount, target);
+      const result = MockBackend.calculateQuote(amount, target, undefined, undefined, initialGateway);
       setQuote(result);
   }, [amount, currency, operationMode]);
 

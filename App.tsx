@@ -61,7 +61,8 @@ const CalculatorWidget = ({
     // Only calculate actual quote if PayPal (since backend is mocked for PayPal mostly)
     // For others, we just simulate/pass-through for UI demo purposes in this step
     const target = tab === 'USDT' ? 'USDT' : 'VES';
-    const result = MockBackend.calculateQuote(amount, target);
+    // PASS GATEWAY TO CALCULATE QUOTE
+    const result = MockBackend.calculateQuote(amount, target, undefined, undefined, gateway);
     setQuote(result);
     onAmountChange(amount);
     if(tab !== 'USD') onTabChange(target);

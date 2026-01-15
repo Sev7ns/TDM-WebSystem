@@ -1,15 +1,15 @@
-import { Transaction, User, SystemConfig, TransactionStatus, CostGroup, ConfigProfile, Coupon, ContactMessage } from '../types';
+import { Transaction, User, SystemConfig, TransactionStatus, CostGroup, ConfigProfile, Coupon, ContactMessage, GatewayProfile } from '../types';
 
 const STORAGE_KEYS = {
   USERS: 'tdm_users_v2',
   TRANSACTIONS: 'tdm_transactions_v2',
-  CONFIG: 'tdm_config_v13',
+  CONFIG: 'tdm_config_v14_gateways', // Bumped version for migration
   MESSAGES: 'tdm_messages'
 };
 
 const DEFAULT_CONFIG: SystemConfig = {
   notices: "Horario de atención: 8:00 AM - 6:00 PM EST",
-  paypalExternalFee: { pct: 5.4, fixed: 0.30 },
+  paypalExternalFee: { pct: 5.4, fixed: 0.30 }, // Legacy global fallback
   hierarchy: {
     level1: { canEditRates: false, canProcessPayments: false, canManageClients: true, canViewAudit: false, canEditCommissions: false },
     level2: { canEditRates: false, canProcessPayments: true, canManageClients: true, canViewAudit: true, canEditCommissions: false },
@@ -39,64 +39,100 @@ const DEFAULT_CONFIG: SystemConfig = {
       coupons: "Administre la vigencia y beneficios de cupones para clientes y referidos."
     },
     profiles: [],
-    rates: {
-      strategy: 'FIXED',
-      baseP2P: 45.50,
-      manualRate: 40.00,
-      profitStrategy: 'GLOBAL',
-      globalProfit: { mode: 'PCT_ONLY', pct: 15, fixed: 0 }
-    },
-    costs: [
-      {
-        id: 'group_bank',
-        label: 'Deducciones Bancarias (Recepción)',
-        items: [
-          { id: 'c1', label: 'Comisión Recepción Banco', type: 'PCT', category: 'DEDUCTIVE', value: 1.5, enabled: true, isClientChargeable: true },
-        ]
-      },
-      {
-        id: 'group_service',
-        label: 'Servicios Administrativos',
-        items: [
-           { id: 'c2', label: 'Gastos Operativos', type: 'FIXED', category: 'ADDITIVE', value: 0.50, enabled: true, isClientChargeable: true }
-        ]
-      }
-    ],
-    currencies: [
-      {
-        code: 'VES', name: 'Bolívares', enabled: true,
-        rateMode: 'MANUAL',
-        manualRate: 45.50, // P2P Deductiva
-        secondaryRate: 46.00, // BCV Referencial
-        dynamicSetting: {
-           references: [
-              { id: 'r1', label: 'Promedio P2P', value: 46.50, isActive: true, isReferential: false },
-              { id: 'r2', label: 'BCV Oficial', value: 46.00, isActive: false, isReferential: true },
-           ],
-           profitRule: { mode: 'PCT_ONLY', pct: 12, fixed: 0 },
-           amountRanges: []
+    // NEW GATEWAY PROFILES STRUCTURE
+    gatewayProfiles: [
+        {
+            id: 'gw-paypal',
+            slug: 'PAYPAL',
+            label: 'Saldo PayPal',
+            iconName: 'Wallet',
+            enabled: true,
+            currencies: [
+                {
+                    code: 'VES', name: 'Bolívares', enabled: true,
+                    rateMode: 'MANUAL',
+                    manualRate: 45.50, // P2P Deductiva
+                    secondaryRate: 46.00, // BCV Referencial
+                    dynamicSetting: {
+                       references: [
+                          { id: 'r1', label: 'Promedio P2P', value: 46.50, isActive: true, isReferential: false },
+                          { id: 'r2', label: 'BCV Oficial', value: 46.00, isActive: false, isReferential: true },
+                       ],
+                       profitRule: { mode: 'PCT_ONLY', pct: 12, fixed: 0 },
+                       amountRanges: []
+                    },
+                    methods: [
+                      { id: 'm1', name: 'Pago Móvil', enabled: true, commission: { pct: 0, fixed: 0, enabled: false } },
+                      { id: 'm2', name: 'Transferencia', enabled: true, commission: { pct: 0, fixed: 0, enabled: false } }
+                    ]
+                },
+                {
+                    code: 'USDT', name: 'Tether (Cripto)', enabled: true,
+                    rateMode: 'MANUAL',
+                    manualRate: 0.95,
+                    dynamicSetting: {
+                       references: [
+                          { id: 'r3', label: 'Mercado Spot', value: 1.00, isActive: true }
+                       ],
+                       profitRule: { mode: 'PCT_ONLY', pct: 5, fixed: 0 },
+                       amountRanges: []
+                    },
+                    methods: [
+                      { id: 'm3', name: 'Binance Pay', enabled: true, commission: { pct: 0, fixed: 1, enabled: true } },
+                      { id: 'm4', name: 'On-Chain (TRC20)', enabled: true, commission: { pct: 0, fixed: 3, enabled: true } }
+                    ]
+                }
+            ],
+            costs: [
+              {
+                id: 'group_bank',
+                label: 'Deducciones Bancarias (Recepción)',
+                items: [
+                  { id: 'c1', label: 'Comisión PayPal (Est.)', type: 'PCT', category: 'DEDUCTIVE', value: 5.4, enabled: true, isClientChargeable: true },
+                  { id: 'c1b', label: 'Fijo PayPal', type: 'FIXED', category: 'DEDUCTIVE', value: 0.30, enabled: true, isClientChargeable: true },
+                ]
+              },
+              {
+                id: 'group_service',
+                label: 'Servicios Administrativos',
+                items: [
+                   { id: 'c2', label: 'Gastos Operativos', type: 'FIXED', category: 'ADDITIVE', value: 0.50, enabled: true, isClientChargeable: true }
+                ]
+              }
+            ]
         },
-        methods: [
-          { id: 'm1', name: 'Pago Móvil', enabled: true, commission: { pct: 0, fixed: 0, enabled: false } },
-          { id: 'm2', name: 'Transferencia', enabled: true, commission: { pct: 0, fixed: 0, enabled: false } }
-        ]
-      },
-      {
-        code: 'USDT', name: 'Tether (Cripto)', enabled: true,
-        rateMode: 'MANUAL',
-        manualRate: 0.95,
-        dynamicSetting: {
-           references: [
-              { id: 'r3', label: 'Mercado Spot', value: 1.00, isActive: true }
-           ],
-           profitRule: { mode: 'PCT_ONLY', pct: 5, fixed: 0 },
-           amountRanges: []
-        },
-        methods: [
-          { id: 'm3', name: 'Binance Pay', enabled: true, commission: { pct: 0, fixed: 1, enabled: true } },
-          { id: 'm4', name: 'On-Chain (TRC20)', enabled: true, commission: { pct: 0, fixed: 3, enabled: true } }
-        ]
-      }
+        {
+            id: 'gw-usdt',
+            slug: 'USDT',
+            label: 'Criptomonedas',
+            iconName: 'Bitcoin',
+            enabled: true,
+            currencies: [
+                {
+                    code: 'VES', name: 'Bolívares', enabled: true,
+                    rateMode: 'MANUAL',
+                    manualRate: 46.00,
+                    secondaryRate: 46.00,
+                    dynamicSetting: {
+                       references: [],
+                       profitRule: { mode: 'PCT_ONLY', pct: 5, fixed: 0 },
+                       amountRanges: []
+                    },
+                    methods: [
+                      { id: 'm1', name: 'Pago Móvil', enabled: true, commission: { pct: 0, fixed: 0, enabled: false } }
+                    ]
+                }
+            ],
+            costs: [
+                {
+                    id: 'group_net',
+                    label: 'Costos de Red',
+                    items: [
+                        { id: 'c3', label: 'Fee de Red (Gas)', type: 'FIXED', category: 'DEDUCTIVE', value: 1.00, enabled: true, isClientChargeable: true }
+                    ]
+                }
+            ]
+        }
     ],
     coupons: [
       { 
@@ -130,19 +166,12 @@ const setStorage = (key: string, val: any) => {
 export class MockBackend {
   static getConfig(): SystemConfig {
     const config = getStorage(STORAGE_KEYS.CONFIG, DEFAULT_CONFIG);
-    if (!config.logistics.currencies[0].secondaryRate) {
+    
+    // Migration Logic for new structure (if loading old config)
+    if (!(config.logistics as any).gatewayProfiles) {
         return DEFAULT_CONFIG;
     }
-    // Ensure socialLinks exist in legacy configs
-    if (!config.design.socialLinks) {
-        config.design.socialLinks = DEFAULT_CONFIG.design.socialLinks;
-    }
-    // Ensure amountRanges exist in legacy configs
-    config.logistics.currencies.forEach(c => {
-        if (!c.dynamicSetting.amountRanges) {
-            c.dynamicSetting.amountRanges = [];
-        }
-    });
+    
     return config;
   }
 
@@ -154,13 +183,16 @@ export class MockBackend {
   }
 
   // --- RATES & QUOTES ---
-  static getClientRate(currencyCode: string, amount: number = 0): number {
+  static getClientRate(currencyCode: string, gatewaySlug: string = 'PAYPAL'): number {
     const config = this.getConfig();
-    const currency = config.logistics.currencies.find(c => c.code === currencyCode);
+    const gateway = config.logistics.gatewayProfiles.find(g => g.slug === gatewaySlug);
+    if (!gateway) return 0;
+
+    const currency = gateway.currencies.find(c => c.code === currencyCode);
     if (!currency) return 0;
 
     if (currency.rateMode === 'MANUAL') {
-        return currency.manualRate; // Used as "Deductiva" for calculations
+        return currency.manualRate; 
     } else {
         // Dynamic Fallback
         const activeRef = currency.dynamicSetting.references.find(r => r.isActive) || { value: 0 };
@@ -168,27 +200,8 @@ export class MockBackend {
         const profit = currency.dynamicSetting.profitRule;
         let margin = 0;
         
-        // --- PROFIT CALCULATION LOGIC ---
-        // 'PCT_ONLY': Margin is a percentage of the reference value (e.g. 10% of 50 = 5)
-        // 'FIXED_ONLY': Margin is a fixed value deducted from the rate (e.g. 50 - 5 = 45).
-        
         if (profit.mode === 'PCT_ONLY' || profit.mode === 'MIXED') {
-            let pct = profit.pct;
-            
-            // Dynamic Amount Ranges Logic
-            if (currency.dynamicSetting.amountRanges && amount > 0) {
-                const range = currency.dynamicSetting.amountRanges.find(r => 
-                    r.enabled && 
-                    amount >= r.minAmount && 
-                    (r.maxAmount === 0 || amount <= r.maxAmount)
-                );
-                if (range) {
-                    // Adjustment improves the rate for the client, so it REDUCES the profit margin
-                    pct = Math.max(0, pct - range.adjustmentPct);
-                }
-            }
-            
-            margin += refValue * (pct / 100);
+            margin += refValue * (profit.pct / 100);
         }
         
         if (profit.mode === 'FIXED_ONLY' || profit.mode === 'MIXED') margin += profit.fixed;
@@ -197,34 +210,32 @@ export class MockBackend {
     }
   }
 
-  static calculateQuote(amountGross: number, currencyCode: string, profileId?: string, couponCode?: string) {
+  static calculateQuote(amountGross: number, currencyCode: string, profileId?: string, couponCode?: string, gatewaySlug: string = 'PAYPAL') {
     const config = this.getConfig();
     
-    // 1. PayPal Fee (External)
-    const ppFeePct = config.paypalExternalFee.pct / 100;
-    const ppFeeFixed = config.paypalExternalFee.fixed;
-    const ppFee = (amountGross * ppFeePct) + ppFeeFixed;
-    const netPaypal = amountGross - ppFee;
+    // 1. Find Gateway Profile
+    const gateway = config.logistics.gatewayProfiles.find(g => g.slug === gatewaySlug) || config.logistics.gatewayProfiles[0];
 
-    // 2. Internal Costs Loop
-    let opsDeductions = 0; // "DEDUCTIVE" (Client Chargeable) -> Costs that reduce the money arriving at the "Internal Receipt"
-    let serviceFee = 0;    // "ADDITIVE" -> Costs that are internal profit margins/overhead
-    let adminAbsorbedCosts = 0; // "DEDUCTIVE" (Admin Chargeable) -> Costs paid by admin, not client
+    // 2. Calculate Costs based on Gateway's cost structure
+    let opsDeductions = 0; // "DEDUCTIVE" (Client Chargeable)
+    let serviceFee = 0;    // "ADDITIVE"
+    let adminAbsorbedCosts = 0; // "DEDUCTIVE" (Admin Chargeable)
+    let ppFee = 0; // Explicitly track "fee" type costs if needed for display, though generic costs handle it now
 
-    config.logistics.costs.forEach(group => {
+    gateway.costs.forEach(group => {
         group.items.forEach(item => {
             if(item.enabled) {
                 let val = 0;
-                if(item.type === 'PCT') val = netPaypal * (item.value / 100);
+                // Calculate based on Gross Amount
+                if(item.type === 'PCT') val = amountGross * (item.value / 100);
                 else val = item.value;
+
+                if(item.label.toLowerCase().includes('paypal')) ppFee += val; // Heuristic for UI display compatibility
 
                 if (item.category === 'ADDITIVE') {
                     serviceFee += val; 
                 } else {
-                    // DEDUCTIVE LOGIC SPLIT
-                    // If isClientChargeable is undefined (legacy), assume true.
                     const isChargeable = item.isClientChargeable !== false;
-                    
                     if (isChargeable) {
                         opsDeductions += val; 
                     } else {
@@ -235,37 +246,29 @@ export class MockBackend {
         });
     });
 
-    // --- KEY LOGIC UPDATE FOR ADMIN METRICS ---
-    
-    // Funds available for CLIENT calculation (Only Client Deductions removed)
-    const clientBasis = netPaypal - opsDeductions;
+    const netPaypal = amountGross - ppFee; // Only for UI reference if using PayPal
+
+    // Funds available for CLIENT calculation
+    const clientBasis = amountGross - opsDeductions;
     const baseForExchange = Math.max(0, clientBasis - serviceFee);
 
     // Funds available for ADMIN (Net Internal Receipt)
-    // Admin request: "Non-chargeable costs affect my internal receipt because I assume them".
-    const netInternalReceipt = netPaypal - opsDeductions - adminAbsorbedCosts;
+    const netInternalReceipt = amountGross - opsDeductions - adminAbsorbedCosts;
     
-    const currency = config.logistics.currencies.find(c => c.code === currencyCode);
-    const rate = this.getClientRate(currencyCode, amountGross); 
+    const currency = gateway.currencies.find(c => c.code === currencyCode);
+    const rate = this.getClientRate(currencyCode, gatewaySlug); 
     
     let finalAmount = baseForExchange * rate;
 
     let bcvEquivalent = 0;
-    // Market Rate Identification for Profit Calculation (Arbitrage)
     let marketReferenceRate = 0; 
 
     if (currencyCode === 'VES' && currency) {
-        // Determine the "Real Market Rate" (The rate the admin sells USD for)
         const activeRef = currency.dynamicSetting.references.find(r => r.isActive);
-        marketReferenceRate = activeRef ? activeRef.value : (currency.manualRate * 1.05); // Fallback estimate if no reference active
+        marketReferenceRate = activeRef ? activeRef.value : (currency.manualRate * 1.05); 
 
-        if (currency.rateMode === 'MANUAL' && currency.secondaryRate) {
+        if (currency.secondaryRate) {
             bcvEquivalent = finalAmount / currency.secondaryRate;
-        } else if (currency.rateMode === 'DYNAMIC') {
-            const refRef = currency.dynamicSetting.references.find(r => r.isReferential);
-            if (refRef) {
-                bcvEquivalent = finalAmount / refRef.value;
-            }
         }
     }
 
@@ -284,23 +287,19 @@ export class MockBackend {
 
     // --- PROFIT CALCULATION ---
     let profit = 0;
-    
-    // Logic: Money Held (Real Net Receipt) - Cost to Cover Payment
     const moneyHeld = netInternalReceipt; 
 
     if (currencyCode === 'VES' && marketReferenceRate > 0) {
-        // ARBITRAGE LOGIC FOR VES:
         const costToCoverInUSD = finalAmount / marketReferenceRate;
         profit = moneyHeld - costToCoverInUSD;
     } else {
-        // STANDARD LOGIC (USDT/Other):
         profit = moneyHeld - (finalAmount / (rate || 1));
     }
 
     return {
         gross: amountGross,
-        ppFee,
-        netPaypal,
+        ppFee, // Returned for UI legacy compatibility
+        netPaypal, // Returned for UI legacy compatibility
         opsDeductions, 
         adminAbsorbedCosts, 
         netInternalReceipt, 
@@ -310,7 +309,7 @@ export class MockBackend {
         finalAmount,
         bcvEquivalent,
         appliedCoupon,
-        marketReferenceRate, // Returned for UI if needed
+        marketReferenceRate, 
         internalStats: {
             netProfitUSD: profit
         }
