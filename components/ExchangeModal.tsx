@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, ArrowRight, Calculator, CheckCircle, Loader2, FileText, AlertTriangle, Clock } from 'lucide-react';
+import { X, ArrowRight, Calculator, CheckCircle, Loader2, FileText, AlertTriangle, Clock, RefreshCw, ChevronDown, ChevronUp, Eye, EyeOff } from 'lucide-react';
 import { MockBackend } from '../services/mockBackend';
 import { User } from '../types';
 
@@ -10,18 +10,46 @@ interface ExchangeModalProps {
   onSuccess: (user?: User) => void;
   initialAmount: number;
   initialCurrency: 'VES' | 'USDT';
+  initialOperationMode: 'BUY' | 'SELL';
+  initialGateway: string;
 }
 
 type Step = 'QUOTE' | 'IDENTIFY' | 'CONFIRM';
 
-export const ExchangeModal: React.FC<ExchangeModalProps> = ({ isOpen, onClose, currentUser, onSuccess, initialAmount, initialCurrency }) => {
+const COUNTRY_CODES = [
+    { code: '+58', flag: '🇻🇪', name: 'Venezuela' },
+    { code: '+1',  flag: '🇺🇸', name: 'USA' },
+    { code: '+57', flag: '🇨🇴', name: 'Colombia' },
+    { code: '+34', flag: '🇪🇸', name: 'España' },
+    { code: '+507', flag: '🇵🇦', name: 'Panamá' },
+    { code: '+54', flag: '🇦🇷', name: 'Argentina' },
+    { code: '+56', flag: '🇨🇱', name: 'Chile' },
+    { code: '+51', flag: '🇵🇪', name: 'Perú' },
+    { code: '+52', flag: '🇲🇽', name: 'México' },
+    { code: '+593', flag: '🇪🇨', name: 'Ecuador' },
+    { code: '+55', flag: '🇧🇷', name: 'Brasil' },
+];
+
+export const ExchangeModal: React.FC<ExchangeModalProps> = ({ 
+  isOpen, onClose, currentUser, onSuccess, 
+  initialAmount, initialCurrency, initialOperationMode, initialGateway 
+}) => {
   const [step, setStep] = useState<Step>('QUOTE');
   const [amount, setAmount] = useState<number>(initialAmount);
   const [currency, setCurrency] = useState<'VES' | 'USDT'>(initialCurrency);
+  const [operationMode, setOperationMode] = useState<'BUY' | 'SELL'>(initialOperationMode);
+  
+  // Calculate quote logic
   const [quote, setQuote] = useState(MockBackend.calculateQuote(initialAmount, initialCurrency));
   const [config] = useState(MockBackend.getConfig());
   
-  // Use a Ref for immediate lock, preventing double submissions even before React state updates
+  // Breakdown Toggle State
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+  
+  // Error state for better UX
+  const [error, setError] = useState<string | null>(null);
+  
+  // Use a Ref for immediate lock, preventing double submissions
   const submittingRef = useRef(false);
 
   // Form State
@@ -29,11 +57,16 @@ export const ExchangeModal: React.FC<ExchangeModalProps> = ({ isOpen, onClose, c
     firstName: currentUser?.fullName.split(' ')[0] || '',
     lastName: currentUser?.fullName.split(' ')[1] || '',
     paypalEmail: currentUser?.paypalEmail || '', 
+    phoneCode: '+58', // Default code
     phone: currentUser?.phone || '',
-    note: '',
+    // REPLACED NOTE WITH ACCOUNT FIELDS
+    accountUser: '', 
+    accountPassword: '',
+    // Global password for registration (can be synced)
     password: ''
   });
 
+  const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Reset state when Modal opens
@@ -42,15 +75,33 @@ export const ExchangeModal: React.FC<ExchangeModalProps> = ({ isOpen, onClose, c
       setStep('QUOTE');
       setAmount(initialAmount);
       setCurrency(initialCurrency);
+      setOperationMode(initialOperationMode);
       setQuote(MockBackend.calculateQuote(initialAmount, initialCurrency));
       setIsSubmitting(false);
-      submittingRef.current = false; // Reset lock
+      setIsDetailsOpen(false); // Reset breakdown toggle
+      setError(null);
+      submittingRef.current = false;
+      
+      // Reset form
+      setFormData(prev => ({
+          ...prev,
+          firstName: currentUser?.fullName.split(' ')[0] || '',
+          lastName: currentUser?.fullName.split(' ')[1] || '',
+          paypalEmail: currentUser?.paypalEmail || '',
+          phone: currentUser?.phone || '', 
+          phoneCode: prev.phoneCode,
+          accountUser: currentUser?.email || '', // Pre-fill if known
+          accountPassword: '',
+          password: ''
+      }));
     }
-  }, [isOpen, initialAmount, initialCurrency]);
+  }, [isOpen, initialAmount, initialCurrency, initialOperationMode, currentUser]);
 
   useEffect(() => {
-      setQuote(MockBackend.calculateQuote(amount, currency));
-  }, [amount, currency]);
+      const target = currency;
+      const result = MockBackend.calculateQuote(amount, target);
+      setQuote(result);
+  }, [amount, currency, operationMode]);
 
   if (!isOpen) return null;
 
@@ -60,61 +111,71 @@ export const ExchangeModal: React.FC<ExchangeModalProps> = ({ isOpen, onClose, c
   };
 
   const handleConfirm = async () => {
-    // Immediate Guard Clause
     if (submittingRef.current) return;
     submittingRef.current = true;
     
     setIsSubmitting(true);
+    setError(null);
 
     try {
-        await new Promise(r => setTimeout(r, 1500)); // Simulate network
+        await new Promise(r => setTimeout(r, 1500)); 
 
         let activeUser: User | null = currentUser || null;
         const fullClientName = currentUser?.fullName || `${formData.firstName} ${formData.lastName}`;
+        
+        // Combine Code + Number
+        const finalPhone = formData.phone.startsWith('+') 
+            ? formData.phone 
+            : `${formData.phoneCode} ${formData.phone}`;
 
         // Logic to Create or Find User if not logged in
         if (!activeUser) {
-          const registerRes = MockBackend.register({
-            fullName: fullClientName,
-            email: formData.paypalEmail, // Using PayPal email as simplified ID/Contact for demo
-            phone: formData.phone,
-            paypalEmail: formData.paypalEmail,
-            password: formData.password || '123456'
-          });
-
-          if (registerRes.success && registerRes.user) {
-            activeUser = registerRes.user;
+          const existingUser = MockBackend.getUsers().find(u => u.email === formData.accountUser || u.email === formData.paypalEmail);
+          
+          if (existingUser) {
+             activeUser = existingUser;
           } else {
-            // Fallback: try to find user if it already exists
-            const existingUser = MockBackend.getUsers().find(u => u.email === formData.paypalEmail);
-            if (existingUser) {
-                activeUser = existingUser;
-            } else {
-                alert(registerRes.error || "Error creando usuario o usuario ya existente.");
+              // Use the new fields for registration
+              const registerRes = MockBackend.register({
+                fullName: fullClientName,
+                email: formData.accountUser, // Main email/User
+                phone: finalPhone,
+                paypalEmail: formData.paypalEmail,
+                password: formData.accountPassword || formData.password || '123456'
+              });
+
+              if (registerRes.success && registerRes.user) {
+                activeUser = registerRes.user;
+              } else {
+                setError(registerRes.error || "Error creando usuario. Verifique sus datos.");
                 setIsSubmitting(false);
                 submittingRef.current = false;
                 return;
-            }
+              }
           }
         }
 
         if (activeUser) {
+          const finalAmountIn = amount;
+          const finalAmountOut = operationMode === 'SELL' ? quote.finalAmount : (amount / (quote.rate || 1));
+
           MockBackend.createTransaction({
             clientId: activeUser.id,
             clientName: fullClientName,
             type: 'EXCHANGE_PAYPAL',
-            amountIn: amount,
-            amountOut: quote.finalAmount,
+            amountIn: finalAmountIn,
+            amountOut: finalAmountOut,
             rateApplied: quote.rate,
-            internalNotes: formData.note
+            internalNotes: `${operationMode} MODE - User: ${formData.accountUser}`
           });
           
-          // Order is important: Close first to clean up UI, then Success to trigger Navigation
           onClose(); 
           onSuccess(activeUser);
         }
     } catch (error) {
         console.error("Transaction failed", error);
+        setError("Ocurrió un error inesperado. Inténtalo de nuevo.");
+    } finally {
         setIsSubmitting(false);
         submittingRef.current = false;
     }
@@ -122,8 +183,13 @@ export const ExchangeModal: React.FC<ExchangeModalProps> = ({ isOpen, onClose, c
 
   const isIdentifyValid = () => {
       if (currentUser) return true;
-      return formData.firstName && formData.lastName && formData.paypalEmail && formData.phone;
+      // Validar campos obligatorios básicos y los nuevos campos de cuenta
+      const basicValid = formData.firstName && formData.lastName && formData.paypalEmail && formData.phone;
+      const accountValid = formData.accountUser && formData.accountPassword;
+      return basicValid && accountValid;
   };
+
+  const gatewayLabel = initialGateway === 'PAYPAL' ? 'PayPal' : initialGateway;
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
@@ -166,8 +232,30 @@ export const ExchangeModal: React.FC<ExchangeModalProps> = ({ isOpen, onClose, c
                 {/* STEP 1: QUOTE */}
                 {step === 'QUOTE' && (
                   <div className="space-y-6 animate-fadeIn">
+                    
+                    {/* TOGGLE SWITCH */}
+                    <div className="flex bg-slate-100 p-1 rounded-lg mb-4 relative">
+                        <div 
+                            className={`absolute top-1 bottom-1 w-[calc(50%-4px)] bg-white rounded-md shadow-sm transition-all duration-300 ease-out ${operationMode === 'SELL' ? 'left-1' : 'left-[calc(50%+2px)]'}`}
+                        ></div>
+                        <button 
+                            onClick={() => setOperationMode('SELL')}
+                            className={`flex-1 relative z-10 py-1.5 text-xs font-black uppercase tracking-wider text-center transition-colors ${operationMode === 'SELL' ? 'text-brand-600' : 'text-slate-400 hover:text-slate-600'}`}
+                        >
+                            Vender
+                        </button>
+                        <button 
+                            onClick={() => setOperationMode('BUY')}
+                            className={`flex-1 relative z-10 py-1.5 text-xs font-black uppercase tracking-wider text-center transition-colors ${operationMode === 'BUY' ? 'text-brand-600' : 'text-slate-400 hover:text-slate-600'}`}
+                        >
+                            Comprar
+                        </button>
+                    </div>
+
                     <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Envías (Saldo PayPal)</label>
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
+                          {operationMode === 'SELL' ? `Envías (Saldo ${gatewayLabel})` : 'Pagas en'}
+                      </label>
                       <div className="relative">
                         <span className="absolute left-3 top-2.5 text-slate-400 font-bold">$</span>
                         <input
@@ -176,6 +264,9 @@ export const ExchangeModal: React.FC<ExchangeModalProps> = ({ isOpen, onClose, c
                           onChange={(e) => setAmount(Number(e.target.value))}
                           className="w-full pl-7 pr-3 py-2 border border-slate-200 rounded-lg text-lg font-bold text-slate-800 focus:ring-2 focus:ring-brand-500 outline-none bg-white"
                         />
+                         <span className="absolute right-3 top-3.5 text-xs font-bold text-slate-400">
+                             {operationMode === 'SELL' ? 'USD' : (currency === 'VES' ? 'VES' : 'USDT')}
+                         </span>
                       </div>
                     </div>
 
@@ -190,9 +281,17 @@ export const ExchangeModal: React.FC<ExchangeModalProps> = ({ isOpen, onClose, c
                           <button onClick={() => setCurrency('VES')} className={`px-2 py-1 text-[10px] font-bold rounded ${currency === 'VES' ? 'bg-white shadow-sm text-brand-600' : 'text-brand-400'}`}>VES</button>
                           <button onClick={() => setCurrency('USDT')} className={`px-2 py-1 text-[10px] font-bold rounded ${currency === 'USDT' ? 'bg-white shadow-sm text-brand-600' : 'text-brand-400'}`}>USDT</button>
                       </div>
-                      <label className="block text-xs font-bold text-brand-800 uppercase mb-1">Recibes (Estimado)</label>
+                      <label className="block text-xs font-bold text-brand-800 uppercase mb-1">
+                          {operationMode === 'SELL' ? 'Recibes (Estimado)' : `Recibes (${gatewayLabel})`}
+                      </label>
                       <div className="text-3xl font-extrabold text-brand-700">
-                        {quote.finalAmount.toFixed(2)} <span className="text-sm font-bold text-brand-600">{currency === 'VES' ? 'VES / Bs' : 'USDT'}</span>
+                         {operationMode === 'SELL' 
+                            ? quote.finalAmount.toFixed(2) 
+                            : (amount / (quote.rate || 1)).toFixed(2) 
+                         } 
+                         <span className="text-sm font-bold text-brand-600 ml-1">
+                             {operationMode === 'SELL' ? (currency === 'VES' ? 'VES / Bs' : 'USDT') : 'USD'}
+                         </span>
                       </div>
                       <p className="text-[10px] text-brand-500 mt-2 font-medium">Tasa: {quote.rate.toFixed(2)}</p>
                     </div>
@@ -207,7 +306,7 @@ export const ExchangeModal: React.FC<ExchangeModalProps> = ({ isOpen, onClose, c
                         <div>
                             <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Nombre *</label>
                             <input
-                            className="w-full p-2.5 border border-slate-300 rounded-lg text-sm"
+                            className="w-full p-2.5 bg-white border border-slate-300 text-slate-900 rounded-lg text-sm placeholder:text-slate-400"
                             value={formData.firstName}
                             onChange={e => setFormData({...formData, firstName: e.target.value})}
                             placeholder="Tu Nombre"
@@ -216,7 +315,7 @@ export const ExchangeModal: React.FC<ExchangeModalProps> = ({ isOpen, onClose, c
                         <div>
                             <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Apellido *</label>
                             <input
-                            className="w-full p-2.5 border border-slate-300 rounded-lg text-sm"
+                            className="w-full p-2.5 bg-white border border-slate-300 text-slate-900 rounded-lg text-sm placeholder:text-slate-400"
                             value={formData.lastName}
                             onChange={e => setFormData({...formData, lastName: e.target.value})}
                             placeholder="Tu Apellido"
@@ -230,48 +329,75 @@ export const ExchangeModal: React.FC<ExchangeModalProps> = ({ isOpen, onClose, c
                         <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Correo PayPal (Para Factura) *</label>
                         <input
                         type="email"
-                        className="w-full p-2.5 border border-slate-300 rounded-lg text-sm"
+                        className="w-full p-2.5 bg-white border border-slate-300 text-slate-900 rounded-lg text-sm placeholder:text-slate-400"
                         value={formData.paypalEmail}
                         onChange={e => setFormData({...formData, paypalEmail: e.target.value})}
                         placeholder="ejemplo@correo.com"
                         />
                     </div>
 
-                    {/* PHONE (Mandatory) */}
+                    {/* PHONE (Mandatory) WITH COUNTRY SELECTOR - WIDER SELECTOR */}
                     <div>
                         <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Teléfono (WhatsApp) *</label>
-                        <input
-                        className="w-full p-2.5 border border-slate-300 rounded-lg text-sm"
-                        value={formData.phone}
-                        onChange={e => setFormData({...formData, phone: e.target.value})}
-                        placeholder="+58 4XX XXX XXXX"
-                        />
+                        <div className="flex gap-2">
+                             <div className="w-[180px] relative"> 
+                                <select 
+                                    className="w-full p-2.5 bg-white border border-slate-300 text-slate-900 rounded-lg text-xs font-bold appearance-none truncate pr-6"
+                                    value={formData.phoneCode}
+                                    onChange={(e) => setFormData({...formData, phoneCode: e.target.value})}
+                                >
+                                    {COUNTRY_CODES.map(c => (
+                                        <option key={c.code} value={c.code}>{c.flag} {c.name} ({c.code})</option>
+                                    ))}
+                                </select>
+                                <ChevronDown size={14} className="absolute right-2 top-3 text-slate-500 pointer-events-none"/>
+                             </div>
+                             <input
+                                className="flex-1 w-full p-2.5 bg-white border border-slate-300 text-slate-900 rounded-lg text-sm placeholder:text-slate-400"
+                                value={formData.phone}
+                                onChange={e => setFormData({...formData, phone: e.target.value})}
+                                placeholder="412 123 4567"
+                                type="tel"
+                             />
+                        </div>
                     </div>
 
-                    {/* NOTE (Optional) */}
-                    <div>
-                        <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Nota (Opcional)</label>
-                        <textarea
-                        className="w-full p-2.5 border border-slate-300 rounded-lg text-sm h-16"
-                        placeholder="Comentario adicional para la factura..."
-                        value={formData.note}
-                        onChange={e => setFormData({...formData, note: e.target.value})}
-                        />
+                    {/* REPLACED NOTE WITH ACCOUNT REGISTRATION DATA */}
+                    <div className="grid grid-cols-2 gap-3 pt-2">
+                        <div className="col-span-2">
+                            <h4 className="text-[10px] font-black text-brand-600 uppercase tracking-wider mb-2 border-b border-brand-100 pb-1">
+                                Datos de Registro para Cuenta
+                            </h4>
+                        </div>
+                        <div>
+                            <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Usuario / Correo *</label>
+                            <input
+                                className="w-full p-2.5 bg-white border border-slate-300 text-slate-900 rounded-lg text-sm placeholder:text-slate-400"
+                                placeholder="Tu Usuario"
+                                value={formData.accountUser}
+                                onChange={e => setFormData({...formData, accountUser: e.target.value})}
+                            />
+                        </div>
+                        <div>
+                            <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Contraseña *</label>
+                            <div className="relative">
+                                <input
+                                    type={showPassword ? "text" : "password"}
+                                    className="w-full p-2.5 bg-white border border-slate-300 text-slate-900 rounded-lg text-sm placeholder:text-slate-400 pr-8"
+                                    placeholder="*******"
+                                    value={formData.accountPassword}
+                                    onChange={e => setFormData({...formData, accountPassword: e.target.value})}
+                                />
+                                <button 
+                                    type="button"
+                                    onClick={() => setShowPassword(!showPassword)}
+                                    className="absolute right-2 top-2.5 text-slate-400 hover:text-brand-600"
+                                >
+                                    {showPassword ? <EyeOff size={14}/> : <Eye size={14}/>}
+                                </button>
+                            </div>
+                        </div>
                     </div>
-
-                    {/* PASSWORD (Account Creation - Kept minimal) */}
-                    {!currentUser && (
-                      <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
-                        <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Contraseña (Para ver tu recibo)</label>
-                        <input
-                          type="password"
-                          className="w-full p-2.5 border border-slate-300 rounded-lg text-sm"
-                          value={formData.password}
-                          onChange={e => setFormData({...formData, password: e.target.value})}
-                          placeholder="Crea una contraseña segura"
-                        />
-                      </div>
-                    )}
                   </div>
                 )}
 
@@ -288,14 +414,63 @@ export const ExchangeModal: React.FC<ExchangeModalProps> = ({ isOpen, onClose, c
 
                     <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
                       <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 border-b border-slate-100 pb-2">Detalles del Intercambio</h4>
+                      
+                      {/* NEW: OPERATION TYPE ROW */}
+                      <div className="flex justify-between items-center mb-3">
+                           <span className="text-sm text-slate-600">Tipo de Operación:</span>
+                           <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${operationMode === 'SELL' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
+                              {operationMode === 'SELL' ? 'Venta de Saldo' : 'Recarga de Saldo'}
+                           </span>
+                      </div>
+
                       <div className="flex justify-between items-center mb-2">
-                        <span className="text-sm text-slate-600">Envías PayPal:</span>
+                        <span className="text-sm text-slate-600">
+                            {operationMode === 'SELL' ? 'Envías PayPal:' : 'Pagas:'}
+                        </span>
                         <span className="font-bold text-slate-900">${amount.toFixed(2)}</span>
                       </div>
-                      <div className="flex justify-between items-center mb-2">
+                      
+                      <div className="flex justify-between items-center mb-1">
                         <span className="text-sm text-slate-600">Recibes:</span>
-                        <span className="font-bold text-brand-600 text-lg">{quote.finalAmount.toFixed(2)} {currency}</span>
+                        <span className="font-bold text-brand-600 text-lg">
+                            {operationMode === 'SELL' 
+                                ? quote.finalAmount.toFixed(2) 
+                                : (amount / (quote.rate || 1)).toFixed(2) 
+                            } 
+                            {operationMode === 'SELL' ? currency : ' USD'}
+                        </span>
                       </div>
+
+                      {/* COLLAPSIBLE DETAILS BREAKDOWN */}
+                      <button 
+                        onClick={() => setIsDetailsOpen(!isDetailsOpen)}
+                        className="text-[10px] text-brand-600 font-bold flex items-center gap-1 hover:underline mb-3 ml-auto"
+                      >
+                         {isDetailsOpen ? 'Ocultar detalles' : 'Ver desglose de costos'}
+                         {isDetailsOpen ? <ChevronUp size={12}/> : <ChevronDown size={12}/>}
+                      </button>
+
+                      {isDetailsOpen && (
+                          <div className="bg-slate-50 p-3 rounded-lg text-xs space-y-2 mb-3 animate-fadeIn border border-slate-100">
+                               <div className="flex justify-between text-slate-600">
+                                   <span>Tasa de Cambio</span>
+                                   <span className="font-mono">{quote.rate.toFixed(2)}</span>
+                               </div>
+                               {operationMode === 'SELL' && (
+                                   <>
+                                        <div className="flex justify-between text-slate-500">
+                                            <span>Comisión Pasarela (Est.)</span>
+                                            <span className="text-red-500">-${(quote.ppFee || 0).toFixed(2)}</span>
+                                        </div>
+                                        <div className="flex justify-between text-slate-500">
+                                            <span>Comisión Servicio</span>
+                                            <span className="text-red-500">-${((quote.serviceFee || 0) + (quote.opsDeductions || 0)).toFixed(2)}</span>
+                                        </div>
+                                   </>
+                               )}
+                          </div>
+                      )}
+
                       <div className="flex justify-between items-center pt-2 border-t border-slate-100 mt-2">
                         <span className="text-xs text-slate-500">Factura a:</span>
                         <span className="text-xs font-mono bg-slate-100 px-2 py-1 rounded text-slate-600">{formData.paypalEmail}</span>
@@ -303,6 +478,11 @@ export const ExchangeModal: React.FC<ExchangeModalProps> = ({ isOpen, onClose, c
                     </div>
 
                     <div className="text-center space-y-4">
+                        {error && (
+                             <div className="p-3 bg-red-50 text-red-600 rounded-lg text-xs font-bold border border-red-100 flex items-center gap-2 justify-center animate-fadeIn">
+                                <AlertTriangle size={16}/> {error}
+                             </div>
+                        )}
                         <p className="text-[10px] text-slate-400 max-w-xs mx-auto">
                             Al presionar "Confirmar", aceptas los <a href="#" className="underline hover:text-brand-600">Términos y Condiciones</a> del servicio y confirmas que los fondos provienen de actividades lícitas.
                         </p>
@@ -322,7 +502,7 @@ export const ExchangeModal: React.FC<ExchangeModalProps> = ({ isOpen, onClose, c
                 disabled={isSubmitting}
                 className="w-full inline-flex justify-center items-center gap-2 rounded-xl border border-transparent shadow-lg shadow-brand-100 px-4 py-3 bg-brand-600 text-sm font-bold text-white hover:bg-brand-700 focus:outline-none disabled:opacity-70 disabled:cursor-not-allowed transition-all active:scale-95"
               >
-                {isSubmitting ? <Loader2 className="animate-spin h-5 w-5" /> : 'Confirmar Operación'}
+                {isSubmitting ? <Loader2 className="animate-spin h-5 w-5" /> : (operationMode === 'SELL' ? 'Confirmar Intercambio' : 'Confirmar Recarga')}
               </button>
             ) : (
               <button

@@ -1,4 +1,3 @@
-
 import { Transaction, User, SystemConfig, TransactionStatus, CostGroup, ConfigProfile, Coupon, ContactMessage } from '../types';
 
 const STORAGE_KEYS = {
@@ -329,10 +328,10 @@ export class MockBackend {
         return { success: false, error: 'Datos incompletos' };
     }
     
-    // Password strength: Min 8 chars, 1 special char
-    const passwordRegex = /^(?=.*[!@#$%^&*])(?=.{8,})/;
-    if (!passwordRegex.test(userData.password)) {
-        return { success: false, error: 'La contraseña debe tener al menos 8 caracteres y 1 carácter especial.' };
+    // RELAXED PASSWORD CHECK FOR PROTOTYPE/DEMO
+    // Original: const passwordRegex = /^(?=.*[!@#$%^&*])(?=.{8,})/;
+    if (userData.password.length < 3) {
+        return { success: false, error: 'La contraseña es muy corta.' };
     }
 
     if (users.find(u => u.email === userData.email)) {
