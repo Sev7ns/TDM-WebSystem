@@ -72,10 +72,6 @@ export const Navbar: React.FC<NavbarProps> = ({ currentUser, onNavigate, onLogou
                         <LogIn size={16}/>
                         Acceso Cliente
                      </button>
-                     <button onClick={() => { onNavigate('LOGIN_ADMIN'); setIsAuthMenuOpen(false); }} className="w-full text-left px-4 py-3 hover:bg-slate-50 flex items-center gap-2 text-sm text-slate-600">
-                        <ShieldCheck size={16}/>
-                        Acceso Admin
-                     </button>
                   </div>
                 )}
               </div>
@@ -110,7 +106,6 @@ export const Navbar: React.FC<NavbarProps> = ({ currentUser, onNavigate, onLogou
                <>
                  <NavLink to="REGISTER_CLIENT" label="Registrarse" />
                  <NavLink to="LOGIN_CLIENT" label="Acceso Cliente" />
-                 <NavLink to="LOGIN_ADMIN" label="Acceso Admin" />
                </>
             )}
           </div>

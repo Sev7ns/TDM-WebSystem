@@ -687,8 +687,14 @@ function App() {
       </a>
 
       <footer className="bg-white border-t border-slate-200 mt-20 py-12">
-          <div className="max-w-7xl mx-auto px-4 text-center text-slate-400 text-sm">
+          <div className="max-w-7xl mx-auto px-4 flex flex-col md:flex-row justify-between items-center gap-4 text-slate-400 text-sm">
               <p>{config.design.footerText}</p>
+              <button 
+                  onClick={() => setView('LOGIN_ADMIN')} 
+                  className="text-[10px] text-slate-300 hover:text-slate-500 transition-colors uppercase font-bold tracking-widest"
+              >
+                  Administración
+              </button>
           </div>
       </footer>
     </div>
