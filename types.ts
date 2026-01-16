@@ -3,7 +3,7 @@ export type UserRole = 'CLIENT' | 'ADMIN' | 'OWNER';
 export type AdminLevel = 1 | 2 | 3; 
 
 export type TransactionStatus = 
-  | 'PENDING' | 'INVOICE_SENT' | 'VERIFYING' | 'PROCESSING' | 'COMPLETED';      
+  | 'PENDING' | 'INVOICE_SENT' | 'VERIFYING' | 'PROCESSING' | 'COMPLETED' | 'CANCELLED';      
 
 export type TransactionType = 'EXCHANGE_PAYPAL' | 'CRYPTO' | 'ADVISORY';
 
@@ -14,14 +14,14 @@ export interface User {
   role: UserRole;
   phone?: string;
   paypalEmail?: string;
-  country?: string; // New
+  country?: string; 
   password?: string;
   adminLevel?: AdminLevel;
   paymentDetails?: string;
   isTwoFactorEnabled?: boolean;
   notes?: string; 
   referralCode?: string;
-  savedCoupons?: string[]; // Array of coupon codes redeemed by the user
+  savedCoupons?: string[]; 
 }
 
 export interface Transaction {
@@ -40,9 +40,9 @@ export interface Transaction {
   couponApplied?: string;
   
   // New Operational Fields
-  destinationData?: Record<string, string>; // Stores dynamic fields like {bank: 'Banesco', phone: '...'}
-  rejectionReason?: string; // If admin rejects payment verification
-  clientConfirmed?: boolean; // Step 6
+  destinationData?: Record<string, string>; 
+  rejectionReason?: string; 
+  clientConfirmed?: boolean; 
 }
 
 // --- LOGISTICS & CONFIG TYPES ---
@@ -65,7 +65,7 @@ export interface CostItem {
   category: CostCategory; 
   value: number;
   enabled: boolean;
-  isClientChargeable?: boolean; // New: If true, client pays. If false, admin absorbs.
+  isClientChargeable?: boolean; 
 }
 
 export interface CostGroup {
@@ -82,12 +82,12 @@ export interface RateConfig {
   globalProfit: ProfitRule;
 }
 
-// Config Profiles
+// Config Profiles (Legacy/Global)
 export interface ScheduleConfig {
   enabled: boolean;
-  days: number[]; // 0 = Sunday, 1 = Monday...
-  startTime: string; // "08:00"
-  endTime: string; // "18:00"
+  days: number[]; 
+  startTime: string; 
+  endTime: string; 
 }
 
 export interface ConfigProfile {
@@ -112,24 +112,24 @@ export type RateMode = 'MANUAL' | 'DYNAMIC';
 
 export interface ReferenceItem {
   id: string;
-  label: string; // e.g. "Tasa BCV", "Binance P2P"
+  label: string; 
   value: number;
-  isActive: boolean; // Used for Deductive Rate
-  isReferential?: boolean; // Used for Referential Rate (BCV)
+  isActive: boolean; 
+  isReferential?: boolean; 
 }
 
 export interface AmountRangeRule {
   id: string;
   minAmount: number;
-  maxAmount: number; // 0 means infinity
-  adjustmentPct: number; // Percentage to reduce from the profit margin (improving client rate)
+  maxAmount: number; 
+  adjustmentPct: number; 
   enabled: boolean;
 }
 
 export interface DynamicRateSettings {
   references: ReferenceItem[]; 
   profitRule: ProfitRule;
-  amountRanges?: AmountRangeRule[]; // New field for dynamic parameters
+  amountRanges?: AmountRangeRule[]; 
 }
 
 export interface CurrencyConfig {
@@ -138,25 +138,12 @@ export interface CurrencyConfig {
   enabled: boolean;
   
   rateMode: RateMode;
-  manualRate: number; // For VES: "Precio P2P (Deductiva)"
-  secondaryRate?: number; // For VES: "Tasa BCV (Referencial)"
+  manualRate: number; 
+  secondaryRate?: number; 
   
   dynamicSetting: DynamicRateSettings;
 
   methods: PaymentMethodConfig[];
-}
-
-// --- NEW HIERARCHY: GATEWAY PROFILES ---
-export interface GatewayProfile {
-    id: string;
-    slug: string; // 'PAYPAL', 'USDT', 'ZINLI', 'WALLY'
-    label: string; // "Saldo PayPal", "Criptomonedas"
-    iconName: string; // For UI mapping
-    enabled: boolean;
-    
-    // Each Gateway has its own Currencies and Costs
-    currencies: CurrencyConfig[];
-    costs: CostGroup[];
 }
 
 // Coupons
@@ -169,15 +156,37 @@ export interface Coupon {
   category: CouponCategory;
   type: CouponType;
   active: boolean;
-  expirationDate?: string; // YYYY-MM-DD
-  description?: string; // New
+  expirationDate?: string; 
+  description?: string; 
   
-  // For Admin Referrals:
-  adminOwnerId?: string; // The admin who owns this code
-  adminReward?: { type: CostType; value: number }; // What the admin gets
-  
-  // For Clients (Referral benefit OR Promo):
-  clientDiscount: { type: CostType; value: number }; // What the client gets (added to final amount or discounted from fee)
+  adminOwnerId?: string; 
+  adminReward?: { type: CostType; value: number }; 
+  clientDiscount: { type: CostType; value: number }; 
+}
+
+// --- NEW HIERARCHY: OPERATION PROFILES ---
+export interface OperationProfile {
+    id: string;
+    name: string; // e.g. "Venta Estándar", "Compra Mayorista"
+    active: boolean; // Only one active per mode usually, or logic selects first active
+    
+    // The 3 Pillars of Logistics, now scoped to this profile
+    currencies: CurrencyConfig[];
+    costs: CostGroup[];
+    coupons: Coupon[];
+}
+
+// --- ROOT GATEWAY PROFILE ---
+export interface GatewayProfile {
+    id: string;
+    slug: string; // 'PAYPAL', 'USDT'
+    label: string; 
+    iconName: string; 
+    enabled: boolean;
+    
+    // Split Configuration by Operation Mode
+    sellProfiles: OperationProfile[]; // User SELLS to us (We buy) - "Venta de Saldo"
+    buyProfiles: OperationProfile[];  // User BUYS from us (We sell) - "Recarga"
 }
 
 // Hierarchy
@@ -223,12 +232,12 @@ export interface DesignConfig {
    heroSubtitle: string;
    footerText: string;
    processingTimeText: string;
-   whatsappNumber: string; // Legacy support, sync with socialLinks
-   socialLinks: SocialLink[]; // New
+   whatsappNumber: string; 
+   socialLinks: SocialLink[]; 
    services: ServiceItem[];
 }
 
-export interface ContactMessage { // NEW
+export interface ContactMessage {
     id: string;
     fullName: string;
     phone: string;
@@ -239,11 +248,28 @@ export interface ContactMessage { // NEW
     read: boolean;
 }
 
+// --- AUDIT & SYSTEM TYPES ---
+export interface AuditLog {
+    id: string;
+    action: string;
+    details: string;
+    adminName: string;
+    timestamp: number;
+    severity: 'INFO' | 'WARNING' | 'CRITICAL';
+}
+
+export interface SystemNotification {
+    id: string;
+    message: string;
+    type: 'INFO' | 'SUCCESS' | 'WARNING' | 'ERROR';
+    read: boolean;
+    timestamp: number;
+}
+
 export interface SystemConfig {
   logistics: {
-    gatewayProfiles: GatewayProfile[]; // NEW ROOT
-    coupons: Coupon[];
-    profiles: ConfigProfile[];
+    gatewayProfiles: GatewayProfile[]; 
+    profiles: ConfigProfile[]; // Legacy
     descriptions: ContextDescriptions;
   };
   design: DesignConfig; 

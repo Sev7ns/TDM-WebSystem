@@ -14,7 +14,7 @@ import {
 // --- TYPES FOR UI STATE ---
 export type OperationMode = 'BUY' | 'SELL';
 export type GatewayType = 'PAYPAL' | 'USDT' | 'ZINLI' | 'WALLY';
-export type CurrencyType = 'VES' | 'USDT' | 'USD';
+export type CurrencyType = 'VES' | 'USDT';
 
 // --- CALCULATOR WIDGET COMPONENT ---
 interface CalculatorWidgetProps {
@@ -61,11 +61,11 @@ const CalculatorWidget = ({
     // Only calculate actual quote if PayPal (since backend is mocked for PayPal mostly)
     // For others, we just simulate/pass-through for UI demo purposes in this step
     const target = tab === 'USDT' ? 'USDT' : 'VES';
-    // PASS GATEWAY TO CALCULATE QUOTE
-    const result = MockBackend.calculateQuote(amount, target, undefined, undefined, gateway);
+    // PASS GATEWAY AND MODE TO CALCULATE QUOTE
+    const result = MockBackend.calculateQuote(amount, target, undefined, undefined, gateway, operationMode);
     setQuote(result);
     onAmountChange(amount);
-    if(tab !== 'USD') onTabChange(target);
+    onTabChange(target);
   }, [amount, tab, config, gateway, operationMode]);
 
   // Labels map
@@ -391,6 +391,10 @@ function App() {
   const heroContent = getHeroContent();
   const HeroBgIcon = heroContent.BgIcon;
 
+  // View state helpers
+  const isDashboard = view === 'CLIENT_DASHBOARD' || view === 'ADMIN_DASHBOARD';
+  const isAdmin = view === 'ADMIN_DASHBOARD';
+
   const renderView = () => {
     switch (view) {
       case 'CLIENT_DASHBOARD':
@@ -642,14 +646,16 @@ function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans">
-      <Navbar 
-        currentUser={user} 
-        onNavigate={(page) => {
-             setView(page);
-             if (page === 'CLIENT_DASHBOARD') setDashboardTab('SELL'); // Reset tab when clicking menu
-        }} 
-        onLogout={handleLogout} 
-      />
+      {!isAdmin && (
+        <Navbar 
+            currentUser={user} 
+            onNavigate={(page) => {
+                setView(page);
+                if (page === 'CLIENT_DASHBOARD') setDashboardTab('SELL'); // Reset tab when clicking menu
+            }} 
+            onLogout={handleLogout} 
+        />
+      )}
       
       {renderView()}
 
@@ -676,28 +682,32 @@ function App() {
         }}
       />
       
-      {/* GLOBAL WHATSAPP BUTTON */}
-      <a 
-         href={`https://wa.me/${config.design.whatsappNumber}`} 
-         target="_blank" 
-         rel="noreferrer" 
-         className="fixed bottom-6 right-6 bg-green-500 hover:bg-green-600 text-white p-4 rounded-full shadow-xl transition-transform hover:scale-110 flex items-center gap-2 z-50"
-      >
-         <MessageCircle size={24} />
-         <span className="font-bold text-sm hidden md:block">Soporte</span>
-      </a>
+      {/* GLOBAL WHATSAPP BUTTON (HIDDEN IN ADMIN DASHBOARD) */}
+      {!isAdmin && (
+        <a 
+            href={`https://wa.me/${config.design.whatsappNumber}`} 
+            target="_blank" 
+            rel="noreferrer" 
+            className="fixed bottom-6 right-6 bg-green-500 hover:bg-green-600 text-white p-4 rounded-full shadow-xl transition-transform hover:scale-110 flex items-center gap-2 z-50"
+        >
+            <MessageCircle size={24} />
+            <span className="font-bold text-sm hidden md:block">Soporte</span>
+        </a>
+      )}
 
-      <footer className="bg-white border-t border-slate-200 mt-20 py-12">
-          <div className="max-w-7xl mx-auto px-4 flex flex-col md:flex-row justify-between items-center gap-4 text-slate-400 text-sm">
-              <p>{config.design.footerText}</p>
-              <button 
-                  onClick={() => setView('LOGIN_ADMIN')} 
-                  className="text-[10px] text-slate-300 hover:text-slate-500 transition-colors uppercase font-bold tracking-widest"
-              >
-                  Administración
-              </button>
-          </div>
-      </footer>
+      {!isDashboard && (
+        <footer className="bg-white border-t border-slate-200 mt-20 py-12">
+            <div className="max-w-7xl mx-auto px-4 flex flex-col md:flex-row justify-between items-center gap-4 text-slate-400 text-sm">
+                <p>{config.design.footerText}</p>
+                <button 
+                    onClick={() => setView('LOGIN_ADMIN')} 
+                    className="text-[10px] text-slate-300 hover:text-slate-500 transition-colors uppercase font-bold tracking-widest"
+                >
+                    Administración
+                </button>
+            </div>
+        </footer>
+      )}
     </div>
   );
 }
