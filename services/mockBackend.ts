@@ -223,9 +223,11 @@ export class MockBackend {
     
     // Default zero-result
     const zeroResult = {
-        gross: amountGross, ppFee: 0, netPaypal: 0, opsDeductions: 0, adminAbsorbedCosts: 0,
+        gross: amountGross, externalGatewayFee: 0, netGateway: 0, opsDeductions: 0, adminAbsorbedCosts: 0,
         netInternalReceipt: 0, serviceFee: 0, baseForExchange: 0, rate: 0, finalAmount: 0,
-        bcvEquivalent: 0, appliedCoupon: null, marketReferenceRate: 0, internalStats: { netProfitUSD: 0 }
+        bcvEquivalent: 0, appliedCoupon: null, marketReferenceRate: 0, internalStats: { netProfitUSD: 0 },
+        // Legacy prop for compatibility
+        ppFee: 0
     };
 
     if (!profile) return zeroResult;
@@ -234,7 +236,14 @@ export class MockBackend {
     let opsDeductions = 0; 
     let serviceFee = 0;    
     let adminAbsorbedCosts = 0; 
-    let ppFee = 0; 
+    let externalGatewayFee = 0; // Generic external fee (PayPal, Zinli, etc)
+
+    // Helper to check if a cost is the "External Gateway Fee"
+    // Checks for "paypal", "zinli", "pasarela", "fee", or the gateway slug itself
+    const isGatewayFee = (label: string) => {
+        const l = label.toLowerCase();
+        return l.includes('paypal') || l.includes('pasarela') || l.includes('fee') || l.includes(gatewaySlug.toLowerCase());
+    };
 
     profile.costs.forEach(group => {
         group.items.forEach(item => {
@@ -243,12 +252,16 @@ export class MockBackend {
                 if(item.type === 'PCT') val = amountGross * (item.value / 100);
                 else val = item.value;
 
-                if(item.label.toLowerCase().includes('paypal')) ppFee += val; 
+                if(isGatewayFee(item.label) && item.category === 'DEDUCTIVE') {
+                    externalGatewayFee += val; 
+                }
 
                 if (item.category === 'ADDITIVE') {
                     serviceFee += val; 
                 } else {
                     const isChargeable = item.isClientChargeable !== false;
+                    
+                    // If it is the external fee, we count it as deduction but handle it in netGateway logic too
                     if (isChargeable) {
                         opsDeductions += val; 
                     } else {
@@ -259,19 +272,26 @@ export class MockBackend {
         });
     });
 
-    const netPaypal = amountGross - ppFee;
-    const clientBasis = amountGross - opsDeductions;
+    const netGateway = amountGross - externalGatewayFee;
     
-    const baseForExchange = Math.max(0, clientBasis - serviceFee);
+    // NOTE: opsDeductions includes the externalGatewayFee if it was chargeable.
+    // So netInternalReceipt = Gross - All Deductibles - Admin Absorbed
     const netInternalReceipt = amountGross - opsDeductions - adminAbsorbedCosts;
+    const baseForExchange = Math.max(0, amountGross - opsDeductions); // Usually base is what's left after deductions
     
     const currency = profile.currencies.find(c => c.code === currencyCode);
     const rate = this.getClientRate(currencyCode, gatewaySlug, mode); 
     
     let finalAmount = 0;
     if (mode === 'SELL') {
+        // Client sends USD -> We deduct costs -> We exchange remaining USD to VES
         finalAmount = baseForExchange * rate;
     } else {
+        // Client wants to BUY (Recarga)
+        // Usually: Client Pays VES -> We convert to USD -> We deduct costs -> Client receives Net USD
+        // However, if amountGross is the USD amount they want to RECEIVE (Target):
+        // logic depends on input type. Assuming amountGross is the USD base value involved.
+        // Simplified: 
         finalAmount = baseForExchange / (rate || 1);
     }
 
@@ -300,23 +320,28 @@ export class MockBackend {
     }
 
     let profit = 0;
-    const moneyHeld = netInternalReceipt;
-
+    
     if (mode === 'SELL') {
+        // We received 'netInternalReceipt' in USD. We paid 'finalAmount' in VES.
+        // Profit = Money In (USD) - Money Out (USD Equivalent)
         if (currencyCode === 'VES' && marketReferenceRate > 0) {
-            const costToCoverInUSD = finalAmount / marketReferenceRate;
-            profit = moneyHeld - costToCoverInUSD;
+            const costToCoverInUSD = finalAmount / marketReferenceRate; // Reposition cost
+            profit = netInternalReceipt - costToCoverInUSD;
         } else {
-            profit = moneyHeld - (finalAmount / (rate || 1));
+            // Crypto/USD case
+            profit = netInternalReceipt - (finalAmount / (rate || 1));
         }
     } else {
-        profit = serviceFee; 
+        // BUY Mode
+        // We received VES (amountGross * rate?). 
+        // Logic simplified: Profit is usually the service fee + spread.
+        profit = serviceFee + (amountGross * 0.02); // Mock spread profit for demo
     }
 
     return {
         gross: amountGross,
-        ppFee, 
-        netPaypal,
+        externalGatewayFee, // Renamed from ppFee
+        netGateway, // Renamed from netPaypal
         opsDeductions, 
         adminAbsorbedCosts, 
         netInternalReceipt, 
@@ -329,7 +354,10 @@ export class MockBackend {
         marketReferenceRate, 
         internalStats: {
             netProfitUSD: profit
-        }
+        },
+        // Legacy mapping for UI components that might still use ppFee
+        ppFee: externalGatewayFee,
+        netPaypal: netGateway
     };
   }
 

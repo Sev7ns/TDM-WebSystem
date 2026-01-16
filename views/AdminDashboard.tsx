@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { 
   Settings, RefreshCw, Send, Play, CheckCircle, Clock, 
@@ -69,6 +70,10 @@ const SimulatorWidget = ({ config, activeGatewaySlug, activeMode }: { config: Sy
    const isVES = currency === 'VES';
    const profit = result.internalStats?.netProfitUSD || 0;
 
+   // Dynamic Labels
+   const gatewayLabel = activeGatewaySlug;
+   const modeLabel = activeMode === 'SELL' ? 'Venta (In)' : 'Recarga (Out)';
+
    return (
       <div className="sticky top-6 space-y-4 max-h-[calc(100vh-3rem)] overflow-y-auto pr-1 pb-4 custom-scrollbar">
         {/* DARK CARD - SIMULATOR */}
@@ -77,15 +82,15 @@ const SimulatorWidget = ({ config, activeGatewaySlug, activeMode }: { config: Sy
             <div className="bg-slate-900/50 px-4 py-3 border-b border-slate-800 flex justify-between items-center">
                 <div className="flex items-center gap-2">
                     <Activity size={14} className="text-brand-400"/>
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-300">Simulador Financiero</span>
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-300">Simulador: {gatewayLabel}</span>
                 </div>
-                <Badge color="brand" className="bg-slate-800 text-brand-400 border-slate-700">Internal-View</Badge>
+                <Badge color="brand" className="bg-slate-800 text-brand-400 border-slate-700">{modeLabel}</Badge>
             </div>
 
             <div className="p-5 space-y-5">
                 {/* Inputs */}
                 <div>
-                    <label className="text-[10px] font-bold text-slate-500 uppercase mb-1.5 block">Monto Cliente (USD)</label>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase mb-1.5 block">Monto ({gatewayLabel})</label>
                     <div className="relative">
                         <span className="absolute left-3 top-2 text-slate-500 font-bold">$</span>
                         <input 
@@ -99,7 +104,7 @@ const SimulatorWidget = ({ config, activeGatewaySlug, activeMode }: { config: Sy
 
                 <div className="grid grid-cols-2 gap-3">
                      <div>
-                        <label className="text-[10px] font-bold text-slate-500 uppercase mb-1.5 block">Divisa</label>
+                        <label className="text-[10px] font-bold text-slate-500 uppercase mb-1.5 block">Divisa Destino</label>
                         <select 
                             value={currency} 
                             onChange={e => setCurrency(e.target.value)} 
@@ -122,31 +127,31 @@ const SimulatorWidget = ({ config, activeGatewaySlug, activeMode }: { config: Sy
                 {/* Breakdown Table */}
                 <div className="border-t border-slate-800 pt-3 space-y-1.5">
                      <div className="flex justify-between text-xs text-slate-400">
-                         <span>Monto Bruto</span>
+                         <span>Monto Bruto ({gatewayLabel})</span>
                          <span className="font-mono text-white">${simAmount.toFixed(2)}</span>
                      </div>
                      <div className="flex justify-between text-xs text-slate-400">
-                         <span>- PayPal Fee (5.4% + 0.3)</span>
-                         <span className="font-mono text-red-400 font-bold">${result.ppFee.toFixed(2)}</span>
+                         <span>- Comisión {gatewayLabel}</span>
+                         <span className="font-mono text-red-400 font-bold">${result.externalGatewayFee.toFixed(2)}</span>
                      </div>
                      <div className="flex justify-between text-xs font-bold text-white pt-1 border-t border-slate-800/50">
-                         <span>Monto Neto PayPal</span>
-                         <span className="font-mono">${result.netPaypal.toFixed(2)}</span>
+                         <span>Neto {gatewayLabel}</span>
+                         <span className="font-mono">${result.netGateway.toFixed(2)}</span>
                      </div>
                 </div>
 
                 <div className="bg-slate-900/50 rounded-lg p-3 space-y-1.5 border border-slate-800">
                      <div className="flex justify-between text-[10px] text-slate-400">
-                         <span>- Deducciones (Pasarela)</span>
-                         <span className="font-mono text-red-400">-${result.opsDeductions.toFixed(2)}</span>
+                         <span>- Deducciones Operativas</span>
+                         <span className="font-mono text-red-400">-${(result.opsDeductions - result.externalGatewayFee).toFixed(2)}</span>
                      </div>
                      <div className="flex justify-between text-[11px] font-bold text-emerald-400">
-                         <span>Recepción Neta Interna</span>
-                         <span className="font-mono">${result.netInternalReceipt.toFixed(2)}</span>
+                         <span>Base de Intercambio</span>
+                         <span className="font-mono">${result.baseForExchange.toFixed(2)}</span>
                      </div>
                      <div className="flex justify-between text-[10px] text-slate-400">
-                         <span>- Margen de Servicio</span>
-                         <span className="font-mono text-amber-500">-${profit.toFixed(2)}</span>
+                         <span>Margen Servicio (Est.)</span>
+                         <span className="font-mono text-amber-500">~${profit.toFixed(2)}</span>
                      </div>
                 </div>
 
@@ -166,8 +171,8 @@ const SimulatorWidget = ({ config, activeGatewaySlug, activeMode }: { config: Sy
 
                     <div className="mt-3 pt-3 border-t border-slate-700/50 grid grid-cols-2 gap-2 text-[10px] text-slate-400">
                         <div>
-                            <span className="block opacity-60">Cantidad Neta USD:</span>
-                            <span className="text-white font-mono font-bold">${result.baseForExchange.toFixed(2)}</span>
+                            <span className="block opacity-60">Neto a Procesar:</span>
+                            <span className="text-white font-mono font-bold">${result.netInternalReceipt.toFixed(2)}</span>
                         </div>
                          <div className="text-right">
                             <span className="block opacity-60">Equivalente $ BCV:</span>
@@ -180,7 +185,7 @@ const SimulatorWidget = ({ config, activeGatewaySlug, activeMode }: { config: Sy
                 <div className={`flex items-center justify-center p-2 rounded-lg text-xs font-bold border ${profit >= 0 ? 'bg-emerald-950/30 border-emerald-900 text-emerald-400' : 'bg-red-950/30 border-red-900 text-red-400'}`}>
                     Rentabilidad Neta: ${profit.toFixed(2)}
                 </div>
-                <p className="text-[9px] text-center text-slate-500">* Ajustada al costo de reposición (Tasa: {result.marketReferenceRate})</p>
+                <p className="text-[9px] text-center text-slate-500">* Simulador operativo. Valores aproximados.</p>
             </div>
         </div>
 
@@ -191,10 +196,10 @@ const SimulatorWidget = ({ config, activeGatewaySlug, activeMode }: { config: Sy
             </h4>
             <ul className="space-y-2">
                 <li className="text-[11px] text-slate-500 leading-relaxed border-l-2 border-orange-200 pl-2">
-                    Mantenga el spread operativo por encima del 5% para garantizar rentabilidad.
+                    Verifique si la comisión de {gatewayLabel} ha cambiado recientemente.
                 </li>
                 <li className="text-[11px] text-slate-500 leading-relaxed border-l-2 border-slate-200 pl-2">
-                    Verifique la tasa P2P cada 4 horas.
+                    La tasa {activeMode === 'SELL' ? 'Venta' : 'Compra'} debe cubrir costos de reposición.
                 </li>
             </ul>
         </div>
@@ -1356,7 +1361,7 @@ const MessagesView = () => {
                 <Card key={m.id} className="cursor-pointer hover:border-brand-300 transition-colors">
                     <div className="flex justify-between items-center mb-2">
                         <h4 className="font-bold text-slate-800">{m.subject}</h4>
-                        <span className="text-xs text-slate-400">{new Date(m.date).toLocaleDateString()}</span>
+                        <span className="text-xs text-slate-400">{new Date(m.date).toLocaleDateString()}</p>
                     </div>
                     <p className="text-sm text-slate-600 mb-3">{m.message}</p>
                     <div className="flex items-center gap-2 text-xs text-slate-500 border-t border-slate-50 pt-2">
